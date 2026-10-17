@@ -13,7 +13,6 @@ st.set_page_config(page_title="Liga MX - Análisis Estocástico", layout="wide")
 # ==========================================
 # 1. CARGA DE DATOS LOCALES (CSV)
 # ==========================================
-# Lista ajustada a los nombres exactos del archivo CSV descargado
 equipos_liga_mx = [
     "Guadalajara", "Toluca", "América", "Cruz Azul", 
     "Querétaro", "León", "Tijuana", "Puebla", 
@@ -36,7 +35,7 @@ def obtener_datos_historicos_locales(equipo_a, equipo_b):
         
         if datos_a.empty or datos_b.empty:
             st.error("Error: No se encontró uno de los equipos en el archivo CSV.")
-            return 1.2, 1.2, 0, 0, 9.5
+            return 1.2, 1.2, 0, 0
             
         partidos_a = float(datos_a['MP'].values[0])
         partidos_b = float(datos_b['MP'].values[0])
@@ -48,17 +47,14 @@ def obtener_datos_historicos_locales(equipo_a, equipo_b):
         victorias_a = int(datos_a['W'].values[0])
         victorias_b = int(datos_b['W'].values[0])
         
-        # Tiros de esquina promedio de la liga
-        lambda_corners = 9.5 
-        
-        return lambda_a, lambda_b, victorias_a, victorias_b, lambda_corners
+        return lambda_a, lambda_b, victorias_a, victorias_b
 
     except FileNotFoundError:
         st.error("No se encontró el archivo 'liga_mx.csv'. Asegúrate de guardarlo en la misma carpeta que este script.")
-        return 1.2, 1.2, 0, 0, 9.5
+        return 1.2, 1.2, 0, 0
     except Exception as e:
         st.error(f"Ocurrió un error al leer el archivo: {e}")
-        return 1.2, 1.2, 0, 0, 9.5
+        return 1.2, 1.2, 0, 0
 
 # ==========================================
 # 2. INTERFAZ: SECCIÓN DE ANÁLISIS HISTÓRICO Y ESPERADO
@@ -78,8 +74,8 @@ if equipo_local == equipo_visita:
     st.error("Por favor, selecciona dos equipos distintos.")
     st.stop()
 
-# Cargar datos
-l_local, l_visita, vic_loc, vic_vis, l_corners = obtener_datos_historicos_locales(equipo_local, equipo_visita)
+# Cargar datos (sin tiros de esquina)
+l_local, l_visita, vic_loc, vic_vis = obtener_datos_historicos_locales(equipo_local, equipo_visita)
 lambda_goles_totales = l_local + l_visita
 
 # Simulación de Montecarlo para el resultado (10,000 iteraciones)
@@ -97,14 +93,13 @@ prob_vis = victorias_visita / n_simulaciones
 
 # Métricas Históricas
 st.subheader("Historial Reciente y Estadísticas Base (Torneo Actual)")
-c1, c2, c3 = st.columns(3)
+c1, c2 = st.columns(2)
 c1.metric(f"Victorias Totales {equipo_local}", vic_loc)
 c2.metric(f"Victorias Totales {equipo_visita}", vic_vis)
-c3.metric("Promedio de Corners Esperados", f"{l_corners:.1f}")
 
 # Resultados Estocásticos
 st.subheader("Resultados Más Probables (Simulación de Montecarlo)")
-st.markdown(f"Valor Esperado de Goles ($\\lambda$): **{equipo_local} ({l_local:.2f}) vs {equipo_visita} ({l_visita:.2f})**")
+st.markdown(f"Valor Esperado de Goles ($\\lambda$): **{equipo_local} ({l_local:.2f}) vs {equipo_visita} ({l_visita:.2f})** | Total esperado: **{lambda_goles_totales:.2f} goles**")
 
 col_res1, col_res2, col_res3 = st.columns(3)
 col_res1.metric(f"Gana {equipo_local}", f"{prob_loc * 100:.1f}%")
@@ -166,9 +161,9 @@ st.divider()
 # 4. INTERFAZ: CALCULADORA MANUAL DE PROBABILIDADES
 # ==========================================
 st.header("2. Calculadora de Escenarios Manual")
-st.markdown("Ingresa un escenario específico para calcular su probabilidad teórica conjunta asumiendo independencia estocástica.")
+st.markdown("Ingresa un escenario específico para calcular su probabilidad teórica conjunta.")
 
-col_man1, col_man2, col_man3 = st.columns(3)
+col_man1, col_man2 = st.columns(2)
 
 with col_man1:
     resultado_deseado = st.selectbox(
@@ -178,9 +173,6 @@ with col_man1:
 
 with col_man2:
     goles_deseados = st.number_input("Goles Totales Exactos", min_value=0, max_value=15, value=2)
-
-with col_man3:
-    corners_deseados = st.number_input("Tiros de Esquina Exactos", min_value=0, max_value=25, value=9)
 
 # 1. Probabilidad del resultado
 if resultado_deseado == "Gana Local":
@@ -197,19 +189,15 @@ elif resultado_deseado == "Visita o Empate":
 # 2. Probabilidad de goles exactos
 p_goles = poisson.pmf(goles_deseados, lambda_goles_totales)
 
-# 3. Probabilidad de corners exactos
-p_corners = poisson.pmf(corners_deseados, l_corners)
+# Probabilidad Conjunta (Resultado y Goles)
+prob_conjunta = p_resultado * p_goles
 
-# Probabilidad Conjunta
-prob_conjunta = p_resultado * p_goles * p_corners
-
-st.info(f"**Probabilidad del escenario seleccionado:** {(prob_conjunta * 100):.4f}%")
+st.info(f"**Probabilidad del escenario seleccionado:** {(prob_conjunta * 100):.2f}%")
 
 with st.expander("Desglose Matemático del Cálculo"):
     st.markdown(f"""
     * **Probabilidad de Resultado ({resultado_deseado}):** {p_resultado*100:.2f}%
-    * **Probabilidad de Goles ({goles_deseados}):** {p_goles*100:.2f}%
-    * **Probabilidad de Corners ({corners_deseados}):** {p_corners*100:.2f}%
+    * **Probabilidad de Goles Totales ({goles_deseados}):** {p_goles*100:.2f}%
     
-    *Cálculo conjunto:* Multiplicación de variables estocásticas independientes.
+    *Cálculo conjunto:* Multiplicación de las probabilidades de ambos eventos.
     """)
